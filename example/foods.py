@@ -7,7 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 import json as js
 
 renderer_port = 3000
-renderer_url = f"http://localhost:{renderer_port}/render/"
+renderer_url = f"https://rendertron-436513.appspot.com/render/"
 base_url = "https://www.tasteatlas.com/"
 
 # Extract food names from HTML

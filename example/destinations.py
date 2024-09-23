@@ -6,7 +6,7 @@ import os
 from django.http import JsonResponse
 
 renderer_port = 3000
-renderer_url = f"http://localhost:{renderer_port}/render/"
+renderer_url = f"https://rendertron-436513.appspot.com/render/"
 url = "https://artoftravel.tips/list-of-countries-by-continents/"
 req_url = renderer_url + url
 

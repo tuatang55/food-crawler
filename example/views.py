@@ -1,6 +1,5 @@
-from django.shortcuts import render
+# example/views.py
 from datetime import datetime
-# Create your views here.
 
 from django.http import HttpResponse
 

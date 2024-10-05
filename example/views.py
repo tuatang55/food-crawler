@@ -16,6 +16,9 @@ continent_map_pattern = re.compile(r'<map name="m_regions">(.*?)</map>', re.DOTA
 area_tag_pattern = re.compile(r'<area .*?href="(.*?)".*?>')
 food_item_pattern = re.compile(r'<article.*?class="results-post.*?<img.*?src="(.*?)".*?<h2 class="entry-title"><a href="(.*?)" rel="bookmark">(.*?)</a></h2>.*?</article>', re.DOTALL)
 region_name_pattern = re.compile(r'fwp_region=([^&]+)')
+food_description_pattern = re.compile(r'<span class="wpurp-recipe-description".*?>(.*?)</span>', re.DOTALL)
+
+food_id_counter = 1  
 
 async def fetch_url(session, url):
     async with session.get(url) as response:
@@ -33,10 +36,23 @@ async def get_regions(html_content):
         print("Continent map not found.")
         return []
 
+async def get_food_description(session, food_url):
+    """Fetches the food description from the given food_url."""
+    html_content = await fetch_url(session, food_url)
+    if html_content is None:
+        return ""
+
+    description_match = food_description_pattern.search(html_content)
+    if description_match:
+        return description_match.group(1).strip()
+    else:
+        return ""
+
 async def get_foods_for_region(session, region_url):
+    global food_id_counter
     all_food_items = []
     page = 1
-    max_pages = 5  # Limit to 5 pages per region to balance speed and data completeness
+    max_pages = 5 
 
     while page <= max_pages:
         paginated_url = f"{region_url}&fwp_paged={page}"
@@ -44,9 +60,23 @@ async def get_foods_for_region(session, region_url):
         food_items = food_item_pattern.findall(html_content)
         
         if not food_items:
-            break  # No more food items found, exit the loop
+            break 
         
-        all_food_items.extend(food_items)
+        # Create tasks to fetch food descriptions concurrently
+        tasks = [get_food_description(session, url) for _, url, _ in food_items]
+        descriptions = await asyncio.gather(*tasks)
+
+        # Add descriptions and incrementing IDs to food items
+        for (img_url, url, name), description in zip(food_items, descriptions):
+            all_food_items.append({
+                "FoodId": food_id_counter,
+                "FoodImageUrl": img_url, 
+                "FoodUrl": url, 
+                "FoodName": name, 
+                "FoodDescription": description  # Include description
+            })
+            food_id_counter += 1
+
         page += 1
 
     region_name_match = region_name_pattern.search(region_url)
@@ -55,31 +85,35 @@ async def get_foods_for_region(session, region_url):
     return {
         "Region": region_name,
         "Count": len(all_food_items),
-        "Foods": [{"FoodImageUrl": img_url, "FoodUrl": url, "FoodName": name} for img_url, url, name in all_food_items]
+        "Foods": all_food_items
     }
 
 class FoodDataView(View):
     async def get(self, request):
         start_time = time.monotonic()
-        connector = aiohttp.TCPConnector(limit=7)  # Limit concurrent connections
-        
-        async with aiohttp.ClientSession(headers=headers, connector=connector) as session:
-            main_page = await fetch_url(session, base_url)
-            region_urls = await get_regions(main_page)
+        connector = aiohttp.TCPConnector(limit=7)  
 
-            tasks = [get_foods_for_region(session, url) for url in region_urls]
-            region_food_data = await asyncio.gather(*tasks)
+        try: 
+            async with aiohttp.ClientSession(headers=headers, connector=connector) as session:
+                main_page = await fetch_url(session, base_url)
+                region_urls = await get_regions(main_page)
 
-        region_food_dict = {data["Region"]: data for data in region_food_data}
+                tasks = [get_foods_for_region(session, url) for url in region_urls]
+                region_food_data = await asyncio.gather(*tasks)
 
-        # Prepare the JSON response
-        response_data = {
-            "data": region_food_dict,
-            "message": "Data fetched successfully"
-        }
+            region_food_dict = {data["Region"]: data for data in region_food_data}
 
-        end_time = time.monotonic()
-        elapsed_time = end_time - start_time
-        print(f"Data fetched in {elapsed_time:.2f} seconds")
+            response_data = {
+                "data": region_food_dict,
+                "message": "Data fetched successfully"
+            }
 
-        return JsonResponse(response_data)
+            end_time = time.monotonic()
+            elapsed_time = end_time - start_time
+            print(f"Data fetched in {elapsed_time:.2f} seconds")
+
+            return JsonResponse(response_data)
+
+        except Exception as e: 
+            print(f"An error occurred: {e}")
+            return JsonResponse({"error": "Failed to fetch data"}, status=500)

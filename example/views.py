@@ -18,7 +18,7 @@ food_item_pattern = re.compile(r'<article.*?class="results-post.*?<img.*?src="(.
 region_name_pattern = re.compile(r'fwp_region=([^&]+)')
 food_description_pattern = re.compile(r'<span class="wpurp-recipe-description".*?>(.*?)</span>', re.DOTALL)
 
-food_id_counter = 1  
+food_id_counter = 1
 
 async def fetch_url(session, url):
     async with session.get(url) as response:
@@ -29,7 +29,7 @@ async def get_regions(html_content):
     if continent_map_match:
         continent_map = continent_map_match.group(1)
         area_tags = area_tag_pattern.findall(continent_map)
-        
+
         # Construct absolute URLs manually
         return [base_url + tag if tag.startswith('?') else tag for tag in area_tags]
     else:
@@ -52,16 +52,16 @@ async def get_foods_for_region(session, region_url):
     global food_id_counter
     all_food_items = []
     page = 1
-    max_pages = 5 
+    max_pages = 5
 
     while page <= max_pages:
         paginated_url = f"{region_url}&fwp_paged={page}"
         html_content = await fetch_url(session, paginated_url)
         food_items = food_item_pattern.findall(html_content)
-        
+
         if not food_items:
-            break 
-        
+            break
+
         # Create tasks to fetch food descriptions concurrently
         tasks = [get_food_description(session, url) for _, url, _ in food_items]
         descriptions = await asyncio.gather(*tasks)
@@ -70,9 +70,9 @@ async def get_foods_for_region(session, region_url):
         for (img_url, url, name), description in zip(food_items, descriptions):
             all_food_items.append({
                 "FoodId": food_id_counter,
-                "FoodImageUrl": img_url, 
-                "FoodUrl": url, 
-                "FoodName": name, 
+                "FoodImageUrl": img_url,
+                "FoodUrl": url,
+                "FoodName": name,
                 "FoodDescription": description  # Include description
             })
             food_id_counter += 1
@@ -91,9 +91,9 @@ async def get_foods_for_region(session, region_url):
 class FoodDataView(View):
     async def get(self, request):
         start_time = time.monotonic()
-        connector = aiohttp.TCPConnector(limit=7)  
+        connector = aiohttp.TCPConnector(limit=7)
 
-        try: 
+        try:
             async with aiohttp.ClientSession(headers=headers, connector=connector) as session:
                 main_page = await fetch_url(session, base_url)
                 region_urls = await get_regions(main_page)
@@ -114,6 +114,12 @@ class FoodDataView(View):
 
             return JsonResponse(response_data)
 
-        except Exception as e: 
+        except aiohttp.ClientError as e:
+            print(f"Aiohttp Client Error: {e}")  # Log the specific error
+            return JsonResponse({"error": f"Error fetching URL: {e}"}, status=500)
+        except AttributeError as e:
+            print(f"AttributeError: {e}")  # Log the specific error
+            return JsonResponse({"error": f"Error extracting data: {e}"}, status=500)
+        except Exception as e:
             print(f"An error occurred: {e}")
             return JsonResponse({"error": "Failed to fetch data"}, status=500)

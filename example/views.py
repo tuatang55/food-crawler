@@ -112,7 +112,9 @@ class FoodDataView(View):
             elapsed_time = end_time - start_time
             print(f"Data fetched in {elapsed_time:.2f} seconds")
 
-            return JsonResponse(response_data)
+            response = JsonResponse(response_data)
+            response["Access-Control-Allow-Origin"] = "*"
+            return response
 
         except aiohttp.ClientError as e:
             print(f"Aiohttp Client Error: {e}")  # Log the specific error

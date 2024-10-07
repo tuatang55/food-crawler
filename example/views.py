@@ -6,6 +6,8 @@ from django.http import JsonResponse
 from django.views import View
 import time
 
+import html
+
 headers = {
     'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:32.0) Gecko/20100101 Firefox/32.0'
 }
@@ -30,7 +32,6 @@ async def get_regions(html_content):
         continent_map = continent_map_match.group(1)
         area_tags = area_tag_pattern.findall(continent_map)
 
-        # Construct absolute URLs manually
         return [base_url + tag if tag.startswith('?') else tag for tag in area_tags]
     else:
         print("Continent map not found.")
@@ -62,18 +63,16 @@ async def get_foods_for_region(session, region_url):
         if not food_items:
             break
 
-        # Create tasks to fetch food descriptions concurrently
         tasks = [get_food_description(session, url) for _, url, _ in food_items]
         descriptions = await asyncio.gather(*tasks)
 
-        # Add descriptions and incrementing IDs to food items
         for (img_url, url, name), description in zip(food_items, descriptions):
             all_food_items.append({
                 "FoodId": food_id_counter,
                 "FoodImageUrl": img_url,
                 "FoodUrl": url,
-                "FoodName": name,
-                "FoodDescription": description  # Include description
+                "FoodName": html.unescape(name),
+                "FoodDescription": description
             })
             food_id_counter += 1
 
@@ -117,10 +116,10 @@ class FoodDataView(View):
             return response
 
         except aiohttp.ClientError as e:
-            print(f"Aiohttp Client Error: {e}")  # Log the specific error
+            print(f"Aiohttp Client Error: {e}") 
             return JsonResponse({"error": f"Error fetching URL: {e}"}, status=500)
         except AttributeError as e:
-            print(f"AttributeError: {e}")  # Log the specific error
+            print(f"AttributeError: {e}")
             return JsonResponse({"error": f"Error extracting data: {e}"}, status=500)
         except Exception as e:
             print(f"An error occurred: {e}")
